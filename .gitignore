@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.db
+.env
+
+CISA_KEV.json
+enriched_cves.json
+matched_cves.json
+review_matches.json
+threat_intelligence_output.json
+alerts.json
+previous_state.json
+current_assets_snapshot.json
+previous_assets_snapshot.json
+asset_changes.json
+failed_targets.json

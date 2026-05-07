@@ -1,0 +1,59 @@
+[
+  {
+    "asset_id": "ASSET-002",
+    "asset_name": "acuforum forums",
+    "asset_type": "web_application",
+    "business_criticality": "high",
+    "vendor": "Microsoft",
+    "product": "IIS",
+    "keywords": [
+      "iis",
+      "microsoft iis"
+    ],
+    "url": "http://testasp.vulnweb.com",
+    "ip": "44.238.29.244",
+    "open_ports": [
+      80
+    ],
+    "open_services": [
+      {
+        "port": 80,
+        "state": "open",
+        "service_name": "http",
+        "product": "Microsoft IIS httpd",
+        "version": "8.5",
+        "cpe": [
+          "cpe:/a:microsoft:internet_information_services:8.5",
+          "cpe:/o:microsoft:windows"
+        ]
+      }
+    ],
+    "technologies": [
+      {
+        "name": "Microsoft IIS",
+        "category": "web_server",
+        "version": "8.5",
+        "source": "server_header",
+        "confidence": "high"
+      },
+      {
+        "name": "ASP.NET",
+        "category": "framework",
+        "version": null,
+        "source": "x_powered_by",
+        "confidence": "high"
+      },
+      {
+        "name": "Microsoft IIS httpd",
+        "category": "network_service",
+        "version": "8.5",
+        "source": "nmap",
+        "confidence": "high"
+      }
+    ],
+    "is_behind_waf": false,
+    "waf_name": null,
+    "confidence": "medium",
+    "detected_by": "http_headers"
+  }
+]

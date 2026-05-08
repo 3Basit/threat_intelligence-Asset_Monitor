@@ -1,0 +1,30 @@
+# Database (contains live scan data — do not commit)
+threat_intelligence.db
+
+# Auto-generated JSON files (recreated on every run)
+CISA_KEV.json
+enriched_cves.json
+matched_cves.json
+review_matches.json
+previous_state.json
+
+# Snapshot files (machine-specific)
+current_assets_snapshot.json
+previous_assets_snapshot.json
+
+# Environment / API keys
+.env
+*.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# VS Code
+.vscode/
+
+# Windows
+Thumbs.db
+desktop.ini

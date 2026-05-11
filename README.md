@@ -28,19 +28,16 @@ grad.project.C/
 ├── check_db.py                      # DB inspection utility
 │
 ├── targets.json                     # Scan targets (config — edit this)
-├── assets.json                      # Discovered assets (auto-generated)
-├── threat_intelligence_output.json  # ← sent to Prediction Model
-├── alerts.json                      # New/escalated alerts (auto-generated)
-├── asset_changes.json               # Detected infrastructure changes
-│
-├── threat_intelligence.db           # SQLite database (11 tables)
 ├── requirements.txt
-└── README.md
+├── README.md
+└── THREAT_INTELLIGENCE_OUTPUT_GUIDE.md
 ```
+
+> **Note:** Auto-generated files (`assets.json`, `alerts.json`, `asset_changes.json`, `threat_intelligence_output.json`, `threat_intelligence.db`) are excluded from the repo via `.gitignore` — they are recreated on every pipeline run.
 
 ---
 
-## Database Schema (11 Tables)
+## Database Schema (10 Tables)
 
 | Table | Contents |
 |---|---|
@@ -103,7 +100,7 @@ python check_db.py
 **Pipeline steps:**
 
 ```
-init_db()           → creates/migrates SQLite schema (11 tables)
+init_db()           → creates/migrates SQLite schema (10 tables)
 asset_monitor.py    → scans targets, discovers assets + technologies + WAF
 cisa_kev.py         → fetches ~1500+ confirmed-exploited CVEs
 nvd_fetch.py        → enriches CVEs with CVSS + EPSS + CPE version ranges

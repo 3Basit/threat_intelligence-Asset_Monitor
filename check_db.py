@@ -75,7 +75,7 @@ def main():
             """
             SELECT cve_id, asset_id, asset_name, cve_vendor, cve_product,
                    severity, cvss_score, epss_score, vuln_type, match_confidence,
-                   version_confirmed, detected_version,
+                   version_confirmed, detected_version, confirmation_method, cpe_range_matched,
                    has_public_exploit, exploit_count, exploit_ids, cwe_id, cwe_name,
                    attack_technique_id, attack_tactic
             FROM matched_cves ORDER BY asset_id, cve_id
@@ -86,7 +86,7 @@ def main():
             """
             SELECT cve_id, asset_id, asset_name, severity, cvss_score, epss_score,
                    threat_score, threat_pressure_factor, alert_level,
-                   version_confirmed, detected_version,
+                   version_confirmed, detected_version, confirmation_method, cpe_range_matched,
                    is_behind_waf, waf_name,
                    has_public_exploit, exploit_count, cwe_id, cwe_name,
                    attack_technique_id, attack_tactic

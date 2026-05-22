@@ -588,9 +588,14 @@ def export_assets_json(current_assets, targets):
 
         asset_id = a["target_id"].replace("TARGET", "ASSET")
 
+        # Use hostname as asset_name — page titles are unreliable
+        # (login pages, error pages, etc. produce meaningless names)
+        parsed_url  = urlparse(a["url"])
+        asset_label = parsed_url.hostname or a["url"]
+
         assets.append({
             "asset_id":             asset_id,
-            "asset_name":           a["title"] or a["url"],
+            "asset_name":           asset_label,
             "asset_type":           "web_application",
             "business_criticality": target_map.get(a["target_id"], {}).get("business_criticality", "medium"),
             "vendor":               a["vendor"],

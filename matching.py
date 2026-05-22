@@ -95,19 +95,20 @@ def check_version_confirmed(cve, asset_id):
     """
     Two-pass version confirmation:
 
-    Pass 1 — CPE ranges from NVD (structured, high confidence)
-              confirmation_method = "cpe_range"
+    Pass 1 -- CPE ranges from NVD (structured, high confidence)
+               confirmation_method = "cpe_range"
 
-    Pass 2 — Text search in CVE description (fallback, medium confidence)
-              confirmation_method = "text_search"
+    Pass 2 -- Text search in CVE description (fallback, medium confidence)
+               confirmation_method = "text_search"
 
-    No match → version_confirmed=False, confirmation_method="none"
+    No match -> version_confirmed=False, confirmation_method="none"
 
-    Returns (version_confirmed, detected_version, confirmation_method)
+    Returns (version_confirmed, detected_version, confirmation_method, cpe_range_matched)
+    cpe_range_matched is the specific NVD CPE range dict that confirmed the version, or None.
     """
     services = get_asset_services(asset_id)
     if not services:
-        return False, None, "none"
+        return False, None, "none", None
 
     detected_version = None
     for svc in services:
@@ -116,31 +117,31 @@ def check_version_confirmed(cve, asset_id):
             break
 
     if not detected_version:
-        return False, None, "none"
+        return False, None, "none", None
 
-    # ── Pass 1: CPE ranges (high confidence) ─────────────────
+    # -- Pass 1: CPE ranges (high confidence) ---------
     cpe_ranges = cve.get("cpe_ranges", [])
     if cpe_ranges:
         for cpe_range in cpe_ranges:
             if version_in_cpe_range(detected_version, cpe_range):
-                return True, detected_version, "cpe_range"
-        # CPE ranges exist but version NOT in range — definitive no
-        return False, detected_version, "none"
+                return True, detected_version, "cpe_range", cpe_range
+        # CPE ranges exist but version NOT in range -- definitive no
+        return False, detected_version, "none", None
 
-    # ── Pass 2: Text search (medium confidence fallback) ──────
+    # -- Pass 2: Text search (medium confidence fallback) --
     # Only used when NVD has no structured CPE ranges for this CVE
     desc_text = (
         f"{cve.get('description', '')} {cve.get('product', '')}"
     ).lower()
 
     if detected_version.lower() in desc_text:
-        return True, detected_version, "text_search"
+        return True, detected_version, "text_search", None
 
     major_minor = ".".join(detected_version.split(".")[:2])
     if major_minor and major_minor in desc_text:
-        return True, detected_version, "text_search"
+        return True, detected_version, "text_search", None
 
-    return False, detected_version, "none"
+    return False, detected_version, "none", None
 
 
 def run_matching():
@@ -174,13 +175,28 @@ def run_matching():
 
             seen.add(key)
 
-            # ── Version confirmation (CPE-first) ──────────────
-            version_confirmed, detected_version, confirmation_method = (
+            # -- Version confirmation (CPE-first) ------
+            version_confirmed, detected_version, confirmation_method, cpe_range_matched = (
                 check_version_confirmed(cve, asset["asset_id"])
             )
 
-            # ── Exploit-DB lookup ─────────────────────────────
+            # -- Exploit-DB lookup ---------------------
             exploit_info = get_exploitdb_info(cve["cve_id"])
+
+            # Build human-readable CPE range summary for transparency
+            cpe_range_summary = None
+            if cpe_range_matched:
+                parts = []
+                if cpe_range_matched.get("version_start_including"):
+                    parts.append(f">={cpe_range_matched['version_start_including']}")
+                if cpe_range_matched.get("version_start_excluding"):
+                    parts.append(f">{cpe_range_matched['version_start_excluding']}")
+                if cpe_range_matched.get("version_end_including"):
+                    parts.append(f"<={cpe_range_matched['version_end_including']}")
+                if cpe_range_matched.get("version_end_excluding"):
+                    parts.append(f"<{cpe_range_matched['version_end_excluding']}")
+                cpe_range_summary = " ".join(parts) if parts else "exact"
+                print(f"    [CPE MATCH] {cve['cve_id']} v{detected_version} in range: {cpe_range_summary}")
 
             matched.append({
                 "cve_id":               cve["cve_id"],
@@ -207,6 +223,7 @@ def run_matching():
                 "version_confirmed":    version_confirmed,
                 "detected_version":     detected_version,
                 "confirmation_method":  confirmation_method,
+                "cpe_range_matched":    cpe_range_summary,
                 "has_public_exploit":   exploit_info["has_public_exploit"],
                 "exploit_count":        exploit_info["exploit_count"],
                 "exploit_ids":          exploit_info["exploit_ids"],

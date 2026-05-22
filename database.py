@@ -110,6 +110,7 @@ def init_db():
             version_confirmed    INTEGER DEFAULT 0,
             detected_version     TEXT,
             confirmation_method  TEXT DEFAULT 'none',
+            cpe_range_matched    TEXT,
             has_public_exploit      INTEGER DEFAULT 0,
             exploit_count           INTEGER DEFAULT 0,
             exploit_ids             TEXT,
@@ -152,6 +153,7 @@ def init_db():
             version_confirmed       INTEGER DEFAULT 0,
             detected_version        TEXT,
             confirmation_method     TEXT DEFAULT 'none',
+            cpe_range_matched       TEXT,
             is_behind_waf           INTEGER DEFAULT 0,
             waf_name                TEXT,
             has_public_exploit      INTEGER DEFAULT 0,
@@ -252,6 +254,8 @@ def init_db():
         "ALTER TABLE threat_intelligence ADD COLUMN attack_technique_id   TEXT",
         "ALTER TABLE threat_intelligence ADD COLUMN attack_technique_name TEXT",
         "ALTER TABLE threat_intelligence ADD COLUMN attack_tactic         TEXT",
+        "ALTER TABLE matched_cves        ADD COLUMN cpe_range_matched     TEXT",
+        "ALTER TABLE threat_intelligence ADD COLUMN cpe_range_matched     TEXT",
     ]
     for sql in migrations:
         try:
@@ -341,11 +345,11 @@ def save_matched_cves(matches):
                  asset_vendor, asset_product, business_criticality, cvss_score, severity,
                  epss_score, epss_percentile, published, date_added, known_ransomware,
                  vuln_type, description, match_confidence, scope, source,
-                 version_confirmed, detected_version, confirmation_method,
+                 version_confirmed, detected_version, confirmation_method, cpe_range_matched,
                  has_public_exploit, exploit_count, exploit_ids, cwe_id, cwe_name,
                  attack_technique_id, attack_technique_name, attack_tactic)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 m["cve_id"], m["cve_vendor"], m["cve_product"],
                 m["asset_id"], m["asset_name"], m["asset_type"],
@@ -359,6 +363,7 @@ def save_matched_cves(matches):
                 int(m.get("version_confirmed", False)),
                 m.get("detected_version"),
                 m.get("confirmation_method", "none"),
+                m.get("cpe_range_matched"),
                 int(m.get("has_public_exploit", False)),
                 m.get("exploit_count", 0),
                 m.get("exploit_ids", ""),
@@ -381,11 +386,12 @@ def save_threat_intelligence(records):
                  days_since_kev_added, known_ransomware, vuln_type, description,
                  match_confidence, scope, source, threat_score, threat_pressure_factor,
                  alert_level, version_confirmed, detected_version, confirmation_method,
+                 cpe_range_matched,
                  is_behind_waf, waf_name, has_public_exploit, exploit_count, exploit_ids,
                  cwe_id, cwe_name,
                  attack_technique_id, attack_technique_name, attack_tactic)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 r["cve_id"], r["cve_vendor"], r["cve_product"],
                 r["asset_id"], r["asset_name"], r["asset_type"],
@@ -401,6 +407,7 @@ def save_threat_intelligence(records):
                 int(r.get("version_confirmed", False)),
                 r.get("detected_version"),
                 r.get("confirmation_method", "none"),
+                r.get("cpe_range_matched"),
                 int(r.get("is_behind_waf", False)),
                 r.get("waf_name"),
                 int(r.get("has_public_exploit", False)),
@@ -413,9 +420,19 @@ def save_threat_intelligence(records):
 
 
 def save_alerts(alerts_list):
+    """Insert alerts, skipping duplicates for the same CVE+asset+level on the same day."""
     with get_db() as conn:
         cursor = conn.cursor()
         for a in alerts_list:
+            # Deduplicate: one alert per (cve_id, asset_id, alert_level) per calendar day
+            today = a["timestamp"][:10]  # e.g. "2026-05-22"
+            cursor.execute("""
+                SELECT 1 FROM alerts
+                WHERE cve_id = ? AND asset_id = ? AND alert_level = ?
+                  AND substr(timestamp, 1, 10) = ?
+            """, (a["cve_id"], a["asset_id"], a["alert_level"], today))
+            if cursor.fetchone():
+                continue  # already logged today
             cursor.execute("""
                 INSERT INTO alerts
                 (timestamp, reason, alert_level, cve_id, cve_vendor, cve_product,

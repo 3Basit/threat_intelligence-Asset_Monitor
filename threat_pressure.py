@@ -145,6 +145,7 @@ def run_threat_pressure():
             "version_confirmed":      m.get("version_confirmed", False),
             "detected_version":       m.get("detected_version"),
             "confirmation_method":    m.get("confirmation_method", "none"),
+            "cpe_range_matched":      m.get("cpe_range_matched"),
             "is_behind_waf":          is_behind_waf,
             "waf_name":               waf_name,
             "has_public_exploit":     m.get("has_public_exploit", False),

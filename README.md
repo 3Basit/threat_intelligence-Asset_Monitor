@@ -187,12 +187,15 @@ Final Risk = base_probability x threat_pressure_factor
 Two-pass approach to confirm if a detected version is vulnerable:
 
 **Pass 1 — CPE Ranges (High Confidence)**
-Uses structured NVD CPE data to check if the Nmap-detected version falls within the vulnerable range. Adds +0.05 to TPF. Reported as `confirmation_method: "cpe_range"`.
+Uses structured NVD CPE data. Two sub-cases:
+- **CPE with version range** (`versionStartIncluding` / `versionEndExcluding`): checks if the Nmap-detected version falls within the vulnerable range.
+- **CPE with exact version** (no boundaries): extracts the exact version from the CPE criteria string (e.g. `IIS 6.0`) and requires an exact match with the detected version.
+Adds +0.05 to TPF only when confirmed. Reported as `confirmation_method: "cpe_range"`.
 
 **Pass 2 — Text Search (Medium Confidence, fallback)**
 When NVD has no structured CPE data, searches the CVE description text for the version string. Does NOT add TPF bonus. Reported as `confirmation_method: "text_search"`.
 
-**No Match:** `version_confirmed: false`, `confirmation_method: "none"`.
+**No Match:** `version_confirmed: false`, `confirmation_method: "none"`. This includes cases where the exact CPE version does not match the detected version.
 
 ---
 

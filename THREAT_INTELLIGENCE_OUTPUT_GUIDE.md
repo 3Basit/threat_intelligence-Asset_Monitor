@@ -142,19 +142,21 @@ Final Risk Probability = base_probability x threat_pressure_factor
 
 | Field | Type | Example | Description |
 |---|---|---|---|
-| `version_confirmed` | bool | `true` | Whether the detected version is confirmed vulnerable. |
+| `version_confirmed` | bool | `false` | Whether the detected version is confirmed vulnerable. |
 | `detected_version` | string | `"8.5"` | Version string detected by Nmap on the live asset. |
 | `confirmation_method` | string | `"cpe_range"` | How the version was confirmed. See table below. |
+| `cpe_range_matched` | string\|null | `">=6.0 <7.0"` | The specific NVD CPE range or exact version that confirmed the match. `null` if not confirmed. Formats: `">=X <Y"` for ranges, `"exact:X.Y"` for exact CPE versions. |
 
 **`confirmation_method` values:**
 
 | Value | Meaning | Confidence | TPF Bonus |
 |---|---|---|---|
-| `cpe_range` | Version falls within NVD structured CPE range | **High** | +0.05 |
+| `cpe_range` | Version falls within NVD structured CPE range, or exactly matches CPE exact version | **High** | +0.05 |
 | `text_search` | Version string found in CVE description text (fallback) | **Medium** | +0.00 |
-| `none` | Version not confirmed | Low | +0.00 |
+| `none` | Version not confirmed — either no CPE match or exact CPE version mismatch | Low | +0.00 |
 
 > `version_confirmed=true` with `confirmation_method="text_search"` is medium confidence only. Weight it lower than `cpe_range` in your model.
+> `cpe_range_matched` shows exactly which NVD range or version confirmed the result — use it for audit and explainability.
 
 ---
 
@@ -243,7 +245,10 @@ threat_pressure_factor = 1.0 + threat_score
 
 ---
 
-## Worked Example — CVE-2017-7269
+## Worked Example — CVE-2017-7269 on IIS 8.5
+
+> **Note:** CVE-2017-7269 affects **IIS 6.0** (exact CPE). The detected version is **8.5**.
+> The system correctly sets `version_confirmed=false` — this is a potential match, not a confirmed vulnerability.
 
 ```
 CVSS 9.8  (>=9.0)                         -> +0.20
@@ -252,17 +257,21 @@ KEV presence                              -> +0.13
 known_ransomware = false                  -> +0.00
 vuln_type = rce                           -> +0.20
 business_criticality = high               -> +0.13
-days_since_kev_added = 1654 (>365d)       -> +0.00
-version_confirmed via cpe_range           -> +0.05
+days_since_kev_added = 1663 (>365d)       -> +0.00
+version_confirmed = false (cpe mismatch)  -> +0.00  (was 8.5, CPE says 6.0)
 has_public_exploit = true (2 exploits)    -> +0.10
 cwe_id = CWE-120 (informational)          -> +0.00
 attack_technique_id = T1190 (informational) -> +0.00
                                         ---------
-threat_score (raw)                        = 1.01
-threat_score (capped at 1.0)              = 1.0
-threat_pressure_factor                    = 1.0 + 1.0 = 2.0
+threat_score (raw)                        = 0.96
+threat_score (capped at 1.0)              = 0.96
+threat_pressure_factor                    = 1.0 + 0.96 = 1.96
 alert_level                               = CRITICAL (>=1.7)
 ```
+
+> The record remains CRITICAL due to public exploits + EPSS 0.944 + RCE type.
+> It is flagged as **potentially affected** (`version_confirmed=false`), not confirmed vulnerable.
+> Manual verification or Pentest Module confirmation is required.
 
 ---
 

@@ -66,10 +66,55 @@ def parse_version(version_str):
         return None
 
 
+def extract_cpe_version(criteria):
+    """
+    Extract the version component from a CPE 2.3 string.
+    e.g. 'cpe:2.3:a:microsoft:internet_information_services:6.0:*:*:*:*:*:*:*' -> '6.0'
+    Returns None if the version field is a wildcard ('*') or absent.
+    """
+    if not criteria:
+        return None
+    try:
+        parts = criteria.split(":")
+        # CPE 2.3 format: cpe : 2.3 : type : vendor : product : version : ...
+        #                  [0]   [1]   [2]    [3]       [4]        [5]
+        if len(parts) >= 6:
+            version = parts[5]
+            if version and version not in ("*", "-", ""):
+                return version
+    except Exception:
+        pass
+    return None
+
+
 def version_in_cpe_range(detected_version, cpe_range):
-    """Return True if detected_version falls within a single CPE range dict."""
+    """
+    Return True if detected_version falls within a single CPE range dict.
+
+    Two cases handled:
+    1. Range with boundaries (versionStart/versionEnd): standard range check.
+    2. No boundaries but a specific version in the criteria string:
+       detected version must EXACTLY match the CPE version.
+       If the criteria version is a wildcard ('*') or absent: cannot confirm.
+    """
     detected = parse_version(detected_version)
     if not detected:
+        return False
+
+    has_boundaries = any([
+        cpe_range.get("version_start_including"),
+        cpe_range.get("version_start_excluding"),
+        cpe_range.get("version_end_including"),
+        cpe_range.get("version_end_excluding"),
+    ])
+
+    if not has_boundaries:
+        # No version range -- check the exact version encoded in the CPE criteria.
+        # e.g. cpe:2.3:a:microsoft:internet_information_services:6.0:* -> exact 6.0
+        cpe_exact = extract_cpe_version(cpe_range.get("criteria", ""))
+        if cpe_exact:
+            return parse_version(cpe_exact) == detected
+        # Wildcard version in CPE and no boundaries -- cannot confirm.
         return False
 
     start_inc = parse_version(cpe_range.get("version_start_including"))
@@ -195,8 +240,10 @@ def run_matching():
                     parts.append(f"<={cpe_range_matched['version_end_including']}")
                 if cpe_range_matched.get("version_end_excluding"):
                     parts.append(f"<{cpe_range_matched['version_end_excluding']}")
-                cpe_range_summary = " ".join(parts) if parts else "exact"
-                print(f"    [CPE MATCH] {cve['cve_id']} v{detected_version} in range: {cpe_range_summary}")
+                cpe_range_summary = " ".join(parts) if parts else (
+                    "exact:" + (extract_cpe_version(cpe_range_matched.get("criteria", "")) or "*")
+                )
+                print(f"    [CPE MATCH] {cve['cve_id']} v{detected_version} == cpe_exact: {cpe_range_summary}")
 
             matched.append({
                 "cve_id":               cve["cve_id"],

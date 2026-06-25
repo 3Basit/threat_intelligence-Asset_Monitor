@@ -179,11 +179,60 @@ def check_version_confirmed(cve, asset_id):
     # -- Pass 1: CPE ranges (high confidence) ---------
     cpe_ranges = cve.get("cpe_ranges", [])
     if cpe_ranges:
-        for cpe_range in cpe_ranges:
-            if version_in_cpe_range(detected_version, cpe_range):
-                return True, detected_version, "cpe_range", cpe_range
-        # CPE ranges exist but version NOT in range -- definitive no
-        return False, detected_version, "none", None
+        # Only check CPE ranges whose criteria matches the detected product.
+        # CVE configurations often bundle OS/platform CPEs (Ubuntu, Debian, Xcode)
+        # alongside the actual product CPE. Comparing a software version like
+        # nginx 1.20.1 against an Apple Xcode range like <13.0 is a false positive.
+        asset_keywords = [
+            kw.lower()
+            for svc in services
+            for kw in ([svc.get("product", ""), svc.get("service_name", "")])
+            if kw
+        ]
+        def _criteria_matches_product(criteria):
+            """Return True only if the CPE vendor or product field matches
+            the detected asset technology.
+
+            CPE 2.3 format: cpe:2.3:<type>:<vendor>:<product>:<version>:...
+            We check fields [3] (vendor) and [4] (product) specifically,
+            NOT a substring anywhere in the full criteria string.
+
+            This prevents false positives where a CVE affecting F5 BIG-IP
+            (which embeds nginx as a module) has a CPE like:
+              cpe:2.3:a:f5:big-ip_...:8.3:...
+            that does NOT contain "nginx" in vendor/product fields.
+            """
+            c = criteria.lower()
+            # Skip OS-type CPEs (:o:) entirely
+            if ":o:" in c:
+                return False
+            # Parse CPE: cpe : 2.3 : type : vendor : product : version : ...
+            #             [0]   [1]   [2]    [3]       [4]       [5]
+            parts = c.split(":")
+            if len(parts) >= 5:
+                cpe_vendor  = parts[3]
+                cpe_product = parts[4]
+                return any(
+                    kw in cpe_vendor or kw in cpe_product
+                    for kw in asset_keywords if len(kw) > 2
+                )
+            # Fallback for malformed CPE strings
+            return any(kw in c for kw in asset_keywords if len(kw) > 2)
+
+        product_ranges = [r for r in cpe_ranges if _criteria_matches_product(r.get("criteria", ""))]
+
+        if not product_ranges:
+            # No CPE ranges match this product — cannot confirm via CPE.
+            # Do NOT fall back to unrelated CPE ranges (e.g., zzcms, pascom)
+            # whose version numbers are incompatible with the detected software.
+            # Fall through to Pass 2 (text search) below.
+            pass
+        else:
+            for cpe_range in product_ranges:
+                if version_in_cpe_range(detected_version, cpe_range):
+                    return True, detected_version, "cpe_range", cpe_range
+            # Product-specific CPE ranges exist but version NOT in any range → definitive no
+            return False, detected_version, "none", None
 
     # -- Pass 2: Text search (medium confidence fallback) --
     # Only used when NVD has no structured CPE ranges for this CVE
@@ -239,6 +288,15 @@ def run_matching():
             version_confirmed, detected_version, confirmation_method, cpe_range_matched = (
                 check_version_confirmed(cve, asset["asset_id"])
             )
+
+            # NVD keyword-search CVEs (date_added=None, not in CISA KEV) are only
+            # included if version is confirmed. Without confirmation they are noise:
+            # old CVEs from 2009-2014 match the "nginx" keyword but clearly don't
+            # affect nginx 1.18.0 (released 2020).
+            in_cisa_kev = cve.get("date_added") is not None
+            if not in_cisa_kev and not version_confirmed:
+                review.append(cve["cve_id"])
+                continue
 
             # -- Exploit-DB lookup ---------------------
             exploit_info = get_exploitdb_info(cve["cve_id"])

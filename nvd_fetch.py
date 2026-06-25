@@ -57,6 +57,70 @@ def is_relevant(vuln, assets):
     return False
 
 
+def _get_uncovered_keywords(assets, cisa_relevant):
+    """Return asset keywords that have no matching CISA KEV CVEs."""
+    covered = set()
+    for vuln in cisa_relevant:
+        text = f"{vuln['vendor']} {vuln['product']} {vuln['description']}".lower()
+        for asset in assets:
+            for kw in asset["keywords"]:
+                if kw.lower() in text:
+                    covered.add(kw.lower())
+    uncovered = set()
+    for asset in assets:
+        for kw in asset["keywords"]:
+            if kw.lower() not in covered:
+                uncovered.add(kw.lower())
+    return list(uncovered)
+
+
+def fetch_nvd_by_keyword(keyword, max_results=20):
+    """Search NVD directly for HIGH/CRITICAL CVEs matching a product keyword.
+
+    Used as fallback when a detected technology has no CISA KEV entries.
+    """
+    url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+    params = {"keywordSearch": keyword, "resultsPerPage": max_results}
+    headers = {"apiKey": NVD_API_KEY} if NVD_API_KEY else {}
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=15)
+        resp.raise_for_status()
+        results = []
+        for item in resp.json().get("vulnerabilities", []):
+            cve = item.get("cve", {})
+            cve_id = cve.get("id", "")
+            if not cve_id:
+                continue
+            desc = next(
+                (d["value"] for d in cve.get("descriptions", []) if d.get("lang") == "en"),
+                ""
+            )
+            cvss, severity = None, None
+            try:
+                cvss     = cve["metrics"]["cvssMetricV31"][0]["cvssData"]["baseScore"]
+                severity = cve["metrics"]["cvssMetricV31"][0]["cvssData"]["baseSeverity"]
+            except Exception:
+                try:
+                    cvss     = cve["metrics"]["cvssMetricV2"][0]["cvssData"]["baseScore"]
+                    severity = cve["metrics"]["cvssMetricV2"][0]["baseSeverity"]
+                except Exception:
+                    pass
+            if cvss is not None and cvss < 7.0:
+                continue  # skip LOW / MEDIUM
+            results.append({
+                "cve_id":          cve_id,
+                "vendor":          keyword,
+                "product":         keyword,
+                "date_added":      None,
+                "known_ransomware": False,
+                "description":     desc,
+            })
+        return results
+    except Exception as e:
+        log.warning("NVD keyword search '%s' failed: %s", keyword, e)
+        return []
+
+
 def extract_cpe_ranges(cve_data):
     """
     Extract CPE version ranges from NVD API response.
@@ -188,7 +252,25 @@ def enrich_cves():
         return
 
     relevant = [v for v in cisa_data if is_relevant(v, assets)]
-    print(f"Relevant CVEs: {len(relevant)} out of {len(cisa_data)}")
+    print(f"Relevant CVEs (CISA KEV): {len(relevant)} out of {len(cisa_data)}")
+
+    # For technologies with no CISA KEV coverage, search NVD directly
+    uncovered = _get_uncovered_keywords(assets, relevant)
+    if uncovered:
+        print(f"Technologies not in CISA KEV: {uncovered} — querying NVD directly...")
+        existing_ids = {v["cve_id"] for v in relevant}
+        for kw in uncovered:
+            nvd_hits = fetch_nvd_by_keyword(kw, max_results=100)
+            new = [c for c in nvd_hits if c["cve_id"] not in existing_ids]
+            if new:
+                print(f"  + '{kw}': {len(new)} HIGH/CRITICAL CVEs from NVD")
+            else:
+                print(f"  + '{kw}': 0 new CVEs")
+            relevant.extend(new)
+            existing_ids.update(c["cve_id"] for c in new)
+            time.sleep(config.NVD_DELAY_WITH_KEY if NVD_API_KEY else 2)
+
+    print(f"Total CVEs to enrich: {len(relevant)}")
 
     enriched = []
     for i, vuln in enumerate(relevant):

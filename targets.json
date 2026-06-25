@@ -1,12 +1,4 @@
-[ 
-  {
-    "target_id": "TARGET-002",
-    "url": "http://testasp.vulnweb.com",
-    "business_criticality": "high",
-    "internet_facing": true,
-    "authorized": true,
-    "scan_profile": "demo"
-  },
+[
   {
     "target_id": "TARGET-003",
     "url": "https://stdch.menofia.education",

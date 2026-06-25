@@ -112,7 +112,47 @@ Edit `targets.json`:
 ]
 ```
 
-> **Important:** Only scan targets where `"authorized": true`.
+**Field reference:**
+
+| Field | Type | Accepted Values | Description |
+|---|---|---|---|
+| `target_id` | string | any unique string | Identifier used in output and DB |
+| `url` | string | full URL with scheme | Target to scan (http:// or https://) |
+| `business_criticality` | string | `critical` / `high` / `medium` / `low` | Affects TPF score |
+| `internet_facing` | bool | `true` / `false` | Informational only |
+| `authorized` | bool | `true` only | **Must be `true` — targets with `false` are skipped** |
+| `scan_profile` | string | any label | Informational label (e.g. `default`, `university`, `hospital`) |
+
+> **Important:** Only scan targets where `"authorized": true`. Never scan systems you do not own or have explicit written permission to test.
+
+### Configure company profile
+
+Edit `company_profile.json`:
+
+```json
+{
+  "company_name": "Your Company",
+  "industry_sector": "healthcare",
+  "employee_count_range": "1001 to 10000",
+  "estimated_records": 50000,
+  "data_sensitivity": "customer_pii",
+  "region": "US",
+  "annual_revenue_usd": 50000000,
+  "has_cyber_insurance": false,
+  "business_criticality": "high"
+}
+```
+
+**Field reference:**
+
+| Field | Accepted Values |
+|---|---|
+| `industry_sector` | `healthcare`, `financial`, `public_sector`, `retail`, `technology`, `professional_services`, `education`, `industrial`, `transportation`, `energy`, `hospitality`, `entertainment` |
+| `employee_count_range` | `"1 to 10"`, `"11 to 100"`, `"101 to 1000"`, `"1001 to 10000"`, `"10001 to 50000"`, `"50001 or more"` |
+| `data_sensitivity` | `"ip"` (intellectual property), `"corporate"`, `"customer_pii"`, `"unknown"` |
+| `region` | `"US"`, `"EU"`, `"Middle_East"`, `"APAC"`, `"LATAM"`, `"Africa"` |
+| `has_cyber_insurance` | `true` / `false` — reduces ALE by ~$750K if true |
+| `business_criticality` | `"critical"` / `"high"` / `"medium"` / `"low"` |
 
 ### Configuration
 
@@ -135,7 +175,6 @@ All settings are centralized in `config.py` and can be overridden via environmen
 git clone https://github.com/vz-risk/VCDB.git data/vcdb
 
 # Edit company_profile.json with your company's details
-# See prediction_model/schema.py for required fields
 
 # Train the model (one-time)
 python -m prediction_model.model_training --compare

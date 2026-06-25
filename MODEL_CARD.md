@@ -43,7 +43,7 @@
 | 4 | `data_sensitivity_score` | 13.3% | 4.2% |
 | 5 | `attack_type_hacking` | 10.7% | 2.2% |
 
-> **Note:** ElasticNet's L1 regularization zeroed out 17 of 25 features, selecting only the 8 most informative. This automatic feature selection improves generalization on small datasets.
+> **Note:** ElasticNet's L1 regularization zeroed out 15 of 23 features, selecting only the 8 most informative. This automatic feature selection improves generalization on small datasets.
 
 ## Intended Use
 
@@ -79,23 +79,10 @@
 Bühlmann credibility theory blends ML predictions with IBM Cost of Data Breach benchmarks. The blending weight is determined by per-industry sample count: industries with more VCDB training data receive higher weight on the ML prediction, while data-sparse industries fall back toward the IBM benchmark.
 
 ### Prediction Intervals
-Conformal prediction using Jackknife+ (leave-one-out) via MAPIE provides distribution-free 80% confidence intervals. Jackknife+ was selected over CV+ for tighter intervals (width 6.39 vs 6.61 in log-space) at the same coverage level (80.9%). Both methods were evaluated automatically during training. Each output includes a `confidence_tier` (high/medium/low) based on Bühlmann Z.
+Conformal prediction using CV+ (Cross-Validation Plus, cv=5) via MAPIE provides distribution-free 80% confidence intervals. CV+ was selected over Jackknife+ for tighter intervals (6.42 vs 6.43 in log-space) at the same coverage level (81.2%). Both methods are evaluated automatically during training and the tighter one is selected. Each output includes a `confidence_tier` (high/medium/low) based on Bühlmann Z.
 
 ### SHAP Explainability
 LinearExplainer provides per-prediction feature attribution, enabling users to understand which risk factors drive each individual cost estimate.
-
-### Industry Sub-Models
-For industries with ≥40 VCDB training samples (healthcare: 61, financial: 57, public_sector: 49), dedicated ElasticNetCV sub-models are trained without industry one-hot features. These focus on within-sector patterns (attack type, data sensitivity, company size). At inference, the industry model is used if its cross-val R² ≥ 0; otherwise the global model is used as fallback. **Current status:** Sub-models are deployed but performance is limited by training set size — they will improve automatically as SEC EDGAR and Ransomwhere data is added.
-
-### Multi-Source Data Pipeline (v1.1)
-A configurable data pipeline (`data_pipeline.py`) integrates up to 4 training data sources with per-sample confidence weights:
-
-| Source | `confidence_weight` | Status | Notes |
-|--------|--------------------|----|---|
-| VCDB labeled (288 real incidents) | 1.00 | **Active — production model** | Real incident costs |
-| VCDB pseudo-labeled (self-training) | 0.50 | Infrastructure ready (`--semi-supervised`) | Circular if model R² is low |
-| SEC EDGAR 8-K Item 1.05 | 0.50–0.85 | Infrastructure ready (`--sources=sec_edgar`) | Needs NLP for real cost extraction |
-| Ransomwhere.today (ransomware payments) | 0.35 | Not recommended for global model | Distribution mismatch ($6M vs $232K median) |
 
 To retrain the production model:
 ```bash
@@ -109,8 +96,6 @@ python -m prediction_model.model_training --compare
 | VCDB (Verizon Community Database) | Primary training data — real incident costs |
 | IBM Cost of Data Breach Report 2025 | Industry/region benchmarks (Ponemon methodology) |
 | Verizon DBIR 2025 | Base breach rates by industry |
-| Ransomwhere.today | Supplementary training data — ransomware payment amounts |
-| SEC EDGAR 8-K Item 1.05 | Supplementary training data — US public company disclosures |
 | CISA KEV (Known Exploited Vulnerabilities) | Exploit status (frequency side of FAIR) |
 | NVD / EPSS | Vulnerability scoring (frequency side of FAIR) |
 

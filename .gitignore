@@ -46,10 +46,12 @@ env/
 # ── External Data (cloned repos — too large for Git) ──────────
 data/vcdb/
 
-# ── Prediction Model Outputs ─────────────────────────────────
+# ── Prediction Model (local only — not part of TI pipeline on GitHub) ────
 prediction_output.json
 company_profile.json
-prediction_model/saved_model/
+prediction_model/
+MODEL_CARD.md
+PREDICTION_OUTPUT_GUIDE.md
 
 # ── Windows ───────────────────────────────────────────────────
 Thumbs.db

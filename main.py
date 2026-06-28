@@ -54,10 +54,11 @@ def main():
     print("Step 4: Computing TPF + Generating alerts...")
     run_threat_pressure()
 
-    # ── Step 5: FAIR Prediction (optional) ────────────────────────
+    # ── Step 5: FAIR Prediction (disabled — run separately if needed) ──
     print("=" * 50)
-    print("Step 5: FAIR Risk Prediction...")
-    _run_prediction_step()
+    print("Step 5: FAIR Risk Prediction... [SKIPPED — run prediction_model separately]")
+    # To run prediction locally: python -m prediction_model.fair_engine
+    # _run_prediction_step()  ← disabled: prediction module excluded from this pipeline
 
     print("=" * 50)
     print("Pipeline complete!")

@@ -764,7 +764,8 @@ def run_monitor():
                     for s in result.get("open_services", [])
                 ]
                 log.info("Tomcat probe failed for %s — Coyote connector version "
-                         "cleared to prevent false CPE matches", url)
+                         "cleared to prevent false CPE matches",
+                         result.get("url", "unknown"))
 
         current_assets.append(result)
 

@@ -52,6 +52,7 @@ company_profile.json
 prediction_model/
 MODEL_CARD.md
 PREDICTION_OUTPUT_GUIDE.md
+tests/test_fair_engine.py
 
 # ── Windows ───────────────────────────────────────────────────
 Thumbs.db

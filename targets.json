@@ -1,18 +1,32 @@
 [
   {
-    "target_id": "TARGET-003",
+    "target_id": "TARGET-1",
     "url": "https://stdch.menofia.education",
     "business_criticality": "critical",
     "internet_facing": true,
     "authorized": true,
     "scan_profile": "university"
   },
-  {
-    "target_id": "TARGET-004",
+  { "target_id": "TARGET-2",
     "url": "https://menofia.education",
     "business_criticality": "critical",
     "internet_facing": true,
     "authorized": true,
     "scan_profile": "university"
+  },
+  {"target_id": "TARGET-3",
+    "url": "http://testphp.vulnweb.com",
+    "business_criticality": "low",
+    "internet_facing": true,
+    "authorized": true,
+    "scan_profile": "acunetix_test"
+  },
+  {
+    "target_id": "TARGET-8",
+    "url": "http://zero.webappsecurity.com",
+    "business_criticality": "low",
+    "internet_facing": true,
+    "authorized": true,
+    "scan_profile": "webappsecurity_test"
   }
 ]

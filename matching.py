@@ -187,19 +187,24 @@ def check_version_confirmed(cve, asset_id):
         # Handles long Nmap service names like "Apache Tomcat/Coyote JSP engine"
         # by splitting on whitespace/slashes so "tomcat" can match CPE field "tomcat".
         import re as _re
+        # Generic protocol/service names that appear in many unrelated CPE strings.
+        # Including them as product keywords causes false matches (e.g. "http" matches
+        # cpe:...:apache:http_server, iis:http_service, etc.).
+        _SKIP_GENERIC = {"http", "https", "ssl", "ftp", "tcp", "smtp", "dns",
+                         "open", "unknown", "none", "other", "web", "server"}
         _raw_kws = [
             kw
             for svc in services
             for kw in [svc.get("product", ""), svc.get("service_name", "")]
-            if kw
+            if kw and kw.lower() not in _SKIP_GENERIC
         ]
         asset_keywords = set()
         for raw in _raw_kws:
             token = raw.lower().strip()
-            if len(token) > 2:
+            if len(token) > 3 and token not in _SKIP_GENERIC:
                 asset_keywords.add(token)
             for part in _re.split(r'[\s/\-_]+', token):
-                if len(part) > 2:
+                if len(part) > 3 and part not in _SKIP_GENERIC:
                     asset_keywords.add(part)
 
         def _criteria_matches_product(criteria):

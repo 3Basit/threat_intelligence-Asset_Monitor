@@ -1,51 +1,220 @@
-# Threat Intelligence & Asset Monitor
+# Asset Monitor & Threat Intelligence Pipeline
 
-This module is responsible for:
+> **Automated asset fingerprinting and vulnerability intelligence — from a URL to a prioritized, evidence-based threat report.**
 
-1. Discovering and monitoring web assets (HTTP fingerprinting + Nmap + Tech + WAF detection)
-2. Fetching confirmed-exploited vulnerabilities from CISA KEV
-3. Enriching CVEs with CVSS scores + CPE version ranges + CWE classification (NVD) and exploitation probability (EPSS)
-4. Checking public exploit availability (Exploit-DB)
-5. Mapping vulnerabilities to MITRE ATT&CK tactics and techniques
-6. Matching CVEs to live assets using vendor, product, and CPE version ranges
-7. Computing a Threat Pressure Factor (TPF) per CVE-Asset pair
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)](https://python.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-87%20passing-brightgreen)]()
+[![Data Sources](https://img.shields.io/badge/Sources-CISA%20KEV%20%7C%20NVD%20%7C%20EPSS%20%7C%20Exploit--DB-orange)]()
 
-> **Note:** The FAIR prediction model (financial loss estimation) is maintained separately and not part of this pipeline.
+---
+
+## What This Does
+
+Most vulnerability scanners tell you *what* is running. This pipeline tells you *how dangerous it actually is* — and *what the attacker will do with it*.
+
+Starting from a simple target URL, this module:
+
+1. **Discovers** running services, software versions, and technologies (HTTP fingerprinting + Nmap)
+2. **Detects** WAF presence and technology stack (regex signature-based)
+3. **Monitors** for infrastructure changes across scans (port opens, version upgrades, IP changes)
+4. **Fetches** confirmed-exploited vulnerabilities from CISA KEV + enriches with NVD / EPSS / Exploit-DB
+5. **Matches** CVEs to assets using CPE version ranges — preventing false positives by version
+6. **Maps** each vulnerability to a MITRE ATT&CK tactic and technique
+7. **Scores** each CVE-Asset pair with a **Threat Pressure Factor (TPF)** from 9 weighted signals
+8. **Alerts** only when something *changes* (new threat, higher score, escalated level) — zero alert fatigue
+
+---
+
+## Pipeline Flow
+
+```
+targets.json
+    │
+    ▼
+┌─────────────────────────────────────────────────────┐
+│  Asset Monitor                                      │
+│  Phase 1 → HTTP Fingerprinting                      │
+│            Server: nginx/1.18.0 → vendor + version  │
+│            Special: Apache-Coyote → Tomcat probe    │
+│  Phase 2 → Nmap Scan (-sV -Pn -n)                  │
+│            Port 80: nginx 1.18.0 │ cpe:/a:nginx:... │
+│  Phase 3 → Tech & WAF Detection (regex patterns)   │
+│  Phase 4 → Change Detection vs previous snapshot   │
+└──────────────────────┬──────────────────────────────┘
+                       │
+                       ▼
+    CISA KEV → NVD (CVSS + CPE + CWE) + EPSS → Exploit-DB
+                       │
+                       ▼
+              Matching Engine
+              Stage 1: Vendor + Product confidence
+              Stage 2: CPE Filter (skip OS/platform CPEs)
+              Stage 3: Version Confirmation (two-pass)
+              Stage 4: KEV Sanity Gate
+                       │
+                       ▼
+           MITRE ATT&CK Mapping (vuln_type → technique)
+                       │
+                       ▼
+           TPF Scoring (9 factors, capped at 2.0)
+                       │
+                       ▼
+    threat_intelligence_output.json  +  alerts.json
+```
+
+---
+
+## Standalone vs. Integrated Use
+
+This module is **designed to work both ways**:
+
+### ✅ Standalone
+Run it as a complete threat intelligence pipeline on any target. The output (`threat_intelligence_output.json`) is a self-contained, structured report ready for human review or automated tooling.
+
+```bash
+python main.py
+```
+
+### 🔗 Integrated (part of a larger platform)
+The output schema is designed to feed downstream ML models and LLM-based reporting systems. In the [Cyber Risk & Financial Loss Prediction Platform](https://github.com/), this module is the **first stage** of a 4-model pipeline:
+
+```
+Asset Monitor & Threat Intelligence  (this repo)
+            │
+            ▼  threat_intelligence_output.json
+   AI Penetration Testing Module     (RL/PPO agent)
+            │
+            ▼  pentest results
+   Financial Loss Prediction Model   (LightGBM / CatBoost ensemble)
+            │
+            ▼  EAL estimate
+   LLM Intelligent Assistant         (RAG-based report generation)
+            │
+            ▼  PDF / DOCX / HTML executive report
+```
+
+The shared `config.py` and SQLite database allow all modules to operate on the same data store. For multi-module concurrent access, migrate `CRD_DB_PATH` to PostgreSQL.
+
+---
+
+## Key Design Decisions
+
+### False Positive Prevention
+A naive system flags every CVE that shares a vendor name with a detected technology. This module rejects that approach entirely:
+
+```
+CVE-2017-7269 → affects IIS 6.0 ONLY
+Detected:       IIS 8.5
+
+Naive:  "IIS found + CVE found = ALERT"   ← wrong
+Ours:   version 8.5 ≠ 6.0  →  NO ALERT   ← correct
+```
+
+Version confirmation uses **NVD CPE ranges** parsed structurally (not substring-matched), converted to integer tuples for accurate comparison. A KEV Sanity Gate additionally rejects high-confidence KEV CVEs where the detected version falls definitively outside all published CPE ranges.
+
+### Tomcat Version Extraction
+`Server: Apache-Coyote/1.1` reports the Coyote HTTP connector version, not Tomcat's. Using `1.1` for matching would generate false positives across all Tomcat CVEs. The pipeline probes a non-existent path to trigger a 404 error page, which contains the real Tomcat version (e.g., `Apache Tomcat/7.0.70`), and extracts it via regex.
+
+### Smart Alert Suppression
+Alerts fire only when:
+- A CVE-Asset pair is seen for the first time
+- The TPF score increased since the last scan
+- The alert level escalated (e.g., MEDIUM → CRITICAL)
+
+Same threat, same score → no duplicate alert.
+
+---
+
+## Threat Pressure Factor (TPF)
+
+TPF is a composite risk multiplier (range: **1.0 → 2.0**):
+
+```
+TPF = 1.0 + Threat Score    (Threat Score capped at 1.0)
+```
+
+| Factor | Max Weight | Condition |
+|---|---|---|
+| CVSS Score | +0.20 | ≥ 9.0 Critical |
+| EPSS Score | +0.20 | ≥ 0.70 exploitation probability |
+| KEV Presence | +0.13 | Confirmed in CISA KEV (`date_added` is set) |
+| Vulnerability Type | +0.20 | `rce` > `sqli/auth_bypass` > `traversal/ssrf` > `xss` |
+| Business Criticality | +0.20 | `critical` > `high` > `medium` |
+| Recency | +0.10 | KEV added ≤ 30 days ago |
+| Public Exploit | +0.10 | Exploit-DB confirmed |
+| Known Ransomware | +0.07 | Linked to ransomware campaigns |
+| Version Confirmed | +0.05 | CPE range match only (not text search) |
+
+| TPF | Alert Level |
+|---|---|
+| ≥ 1.7 | 🔴 CRITICAL |
+| ≥ 1.5 | 🟠 HIGH |
+| ≥ 1.3 | 🟡 MEDIUM |
+| < 1.3 | 🟢 LOW |
+
+**Example output:**
+```
+[CRITICAL] CVE-2024-38475 | Apache HTTP Server → scanme.nmap.org
+           | rce | TPF: 1.78 | VERSION CPE_RANGE
+```
+
+---
+
+## Data Sources
+
+| Source | What it provides |
+|---|---|
+| [CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) | Confirmed actively exploited CVEs (< 1% of all CVEs, 100% real-world) |
+| [NVD](https://nvd.nist.gov) | CVSS scores + structured CPE version ranges + CWE classification |
+| [EPSS](https://www.first.org/epss/) | ML-based 30-day exploitation probability |
+| [Exploit-DB](https://www.exploit-db.com) | Public proof-of-concept exploit availability |
+| [MITRE ATT&CK](https://attack.mitre.org) | Tactic + technique mapping per vulnerability type |
+| [Nmap](https://nmap.org) | Live service version detection + CPE output |
+
+---
+
+## MITRE ATT&CK Mapping
+
+| vuln_type | Technique ID | Technique Name | Tactic |
+|---|---|---|---|
+| `rce` | T1190 | Exploit Public-Facing Application | Initial Access |
+| `sqli` | T1190 | Exploit Public-Facing Application | Initial Access |
+| `auth_bypass` | T1078 | Valid Accounts | Defense Evasion |
+| `path_traversal` | T1083 | File and Directory Discovery | Discovery |
+| `ssrf` | T1190 | Exploit Public-Facing Application | Initial Access |
+| `xss` | T1059.007 | JavaScript | Execution |
 
 ---
 
 ## Project Structure
 
 ```
-Threat_intelligence-Asset_Monitor/
-|
-|-- main.py                          # Full pipeline runner (Steps 0-4)
-|-- config.py                        # Centralized configuration (paths, API keys, settings)
-|-- logger.py                        # Structured logging setup (console + file rotation)
-|-- asset_monitor.py                 # Phase 1+2+3: HTTP + Nmap + Tech/WAF detection
-|-- cisa_kev.py                      # Fetches CISA KEV catalog (with retry + backoff)
-|-- nvd_fetch.py                     # Enriches CVEs with NVD + EPSS + CPE ranges + CWE
-|-- exploit_db.py                    # Checks public exploit availability per CVE
-|-- mitre_attack.py                  # Maps vuln_type to MITRE ATT&CK techniques
-|-- matching.py                      # Matches CVEs to assets (CPE version-aware)
-|-- threat_pressure.py               # Computes TPF + generates alerts
-|-- database.py                      # SQLite schema + all DB functions (context manager)
-|-- check_db.py                      # DB inspection utility
-|
-|-- tests/                           # Unit tests (87 tests)
-|   |-- test_threat_pressure.py      # TPF computation, alert levels, edge cases
-|   |-- test_matching.py             # Version parsing, CPE ranges, confidence scoring
-|   `-- test_config.py               # Config, logging imports, module imports
-|
-|-- targets.json                     # Scan targets (config — edit this)
-|-- requirements.txt
-|-- README.md
-`-- THREAT_INTELLIGENCE_OUTPUT_GUIDE.md  # TI output field reference
+asset-monitor-threat-intelligence/
+│
+├── main.py                 # Full pipeline runner (Steps 0–4)
+├── config.py               # Centralized config (paths, API keys, env vars)
+├── logger.py               # Structured logging (console + rotating file)
+│
+├── asset_monitor.py        # HTTP fingerprinting + Nmap + Tech/WAF + Change Detection
+├── cisa_kev.py             # CISA KEV catalog fetch (with retry + exponential backoff)
+├── nvd_fetch.py            # NVD enrichment: CVSS + EPSS + CPE ranges + CWE
+├── exploit_db.py           # Exploit-DB public exploit check per CVE
+├── mitre_attack.py         # vuln_type → ATT&CK technique mapping
+├── matching.py             # CVE-Asset matching (4-stage CPE version-aware)
+├── threat_pressure.py      # TPF computation + alert generation + suppression
+├── database.py             # SQLite schema + all DB operations (context manager)
+├── check_db.py             # DB inspection utility
+│
+├── tests/                  # 87 unit tests
+│   ├── test_threat_pressure.py
+│   ├── test_matching.py
+│   └── test_config.py
+│
+├── targets.json            # Scan targets (edit this to add your own)
+├── requirements.txt
+└── THREAT_INTELLIGENCE_OUTPUT_GUIDE.md
 ```
-
-> **Note:** Auto-generated files (`assets.json`, `alerts.json`, `asset_changes.json`,
-> `threat_intelligence_output.json`, `threat_intelligence.db`) are excluded from the repo
-> via `.gitignore` and recreated on each pipeline run.
 
 ---
 
@@ -53,16 +222,16 @@ Threat_intelligence-Asset_Monitor/
 
 | Table | Contents |
 |---|---|
-| `assets` | Discovered web assets |
+| `assets` | Discovered web assets (vendor, version, IP, WAF status) |
 | `asset_services` | Open ports and services from Nmap |
-| `asset_technologies` | Detected technologies (CMS, frameworks, JS libs) |
-| `asset_waf_info` | WAF detection results per asset |
+| `asset_technologies` | Detected technologies (CMS, JS frameworks, libraries) |
+| `asset_waf_info` | WAF detection per asset |
 | `cisa_kev` | Raw CISA KEV catalog |
-| `enriched_cves` | CVEs enriched with CVSS + EPSS + CPE ranges + CWE |
+| `enriched_cves` | CVEs with CVSS + EPSS + CPE ranges + CWE |
 | `exploitdb_cves` | Public exploit availability per CVE |
-| `matched_cves` | CVE-Asset matches with ATT&CK mapping (high confidence only) |
-| `threat_intelligence` | Final TPF output with full context |
-| `alerts` | Alert history |
+| `matched_cves` | CVE-Asset matches with ATT&CK mapping |
+| `threat_intelligence` | Final TPF scores with full context |
+| `alerts` | Alert history (deduplication + suppression log) |
 
 ---
 
@@ -71,24 +240,26 @@ Threat_intelligence-Asset_Monitor/
 ### Requirements
 
 - Python 3.10+
-- Nmap installed and on PATH (or at standard Windows location)
-- Free NVD API key from [nvd.nist.gov](https://nvd.nist.gov/developers/request-an-api-key)
+- [Nmap](https://nmap.org/download.html) installed and on PATH
+- Free [NVD API key](https://nvd.nist.gov/developers/request-an-api-key) (recommended — 10× faster enrichment)
 
-### Install dependencies
+### Install
 
 ```bash
+git clone https://github.com/your-username/asset-monitor-threat-intelligence.git
+cd asset-monitor-threat-intelligence
 pip install -r requirements.txt
 ```
 
-### Configure targets
+### Configure Targets
 
-Edit `targets.json`:
+Edit `targets.json` to add the systems you are authorized to test:
 
 ```json
 [
   {
     "target_id": "TARGET-001",
-    "url": "http://your-target.com",
+    "url": "https://your-target.com",
     "business_criticality": "high",
     "internet_facing": true,
     "authorized": true,
@@ -97,244 +268,61 @@ Edit `targets.json`:
 ]
 ```
 
-**Field reference:**
+> ⚠️ **Important:** Only scan systems you own or have explicit written authorization to test. Set `"authorized": false` to skip a target without removing it.
 
-| Field | Type | Accepted Values | Description |
-|---|---|---|---|
-| `target_id` | string | any unique string | Identifier used in output and DB |
-| `url` | string | full URL with scheme | Target to scan (http:// or https://) |
-| `business_criticality` | string | `critical` / `high` / `medium` / `low` | Affects TPF score |
-| `internet_facing` | bool | `true` / `false` | Informational only |
-| `authorized` | bool | `true` only | **Must be `true` — targets with `false` are skipped** |
-| `scan_profile` | string | any label | Informational label (e.g. `default`, `university`, `hospital`) |
-
-> **Important:** Only scan targets where `"authorized": true`. Never scan systems you do not own or have explicit written permission to test.
-
-### Configure company profile
-
-Edit `company_profile.json`:
-
-```json
-{
-  "company_name": "Your Company",
-  "industry_sector": "healthcare",
-  "employee_count_range": "1001 to 10000",
-  "estimated_records": 50000,
-  "data_sensitivity": "customer_pii",
-  "region": "US",
-  "annual_revenue_usd": 50000000,
-  "has_cyber_insurance": false,
-  "business_criticality": "high"
-}
-```
-
-**Field reference:**
-
-| Field | Accepted Values |
-|---|---|
-| `industry_sector` | `healthcare`, `financial`, `public_sector`, `retail`, `technology`, `professional_services`, `education`, `industrial`, `transportation`, `energy`, `hospitality`, `entertainment` |
-| `employee_count_range` | `"1 to 10"`, `"11 to 100"`, `"101 to 1000"`, `"1001 to 10000"`, `"10001 to 50000"`, `"50001 or more"` |
-| `data_sensitivity` | `"ip"` (intellectual property), `"corporate"`, `"customer_pii"`, `"unknown"` |
-| `region` | `"US"`, `"EU"`, `"Middle_East"`, `"APAC"`, `"LATAM"`, `"Africa"` |
-| `has_cyber_insurance` | `true` / `false` — reduces ALE by ~$750K if true |
-| `business_criticality` | `"critical"` / `"high"` / `"medium"` / `"low"` |
-
-### Configuration
-
-All settings are centralized in `config.py` and can be overridden via environment variables with the `CRD_` prefix:
-
-| Environment Variable | Default | Description |
-|---|---|---|
-| `CRD_DB_PATH` | `threat_intelligence.db` | SQLite database path |
-| `NVD_API_KEY` or `CRD_NVD_API_KEY` | (empty) | NVD API key for faster enrichment |
-| `CRD_LOG_LEVEL` | `INFO` | Logging level (DEBUG/INFO/WARNING/ERROR) |
-| `CRD_LOG_FILE` | (empty) | Log file path (empty = console only) |
-| `CRD_TARGETS_FILE` | `targets.json` | Scan targets file |
-| `CRD_MODEL_DIR` | `prediction_model/saved_model` | Trained model directory |
-| `CRD_SCAN_DELAY_SECONDS` | `2` | Delay between target scans |
-
----
-
-## Running the Pipeline
+### Run
 
 ```bash
-# Set NVD API key (recommended — 10x faster enrichment)
-# Windows PowerShell:
-$env:NVD_API_KEY="your-key-here"
-# Linux/Mac:
-export NVD_API_KEY="your-key-here"
+# Set NVD API key for faster enrichment
+$env:NVD_API_KEY="your-key-here"      # PowerShell
+export NVD_API_KEY="your-key-here"    # Linux/Mac
 
 # Run full pipeline
 python main.py
 
-# Inspect database
+# Inspect the database
 python check_db.py
 ```
 
-**Pipeline steps (Steps 0–4):**
+### Environment Variables
 
-```
-init_db()           -> creates/migrates SQLite schema (10 tables)
-asset_monitor.py    -> scans targets, discovers assets + technologies + WAF
-cisa_kev.py         -> fetches ~1500+ confirmed-exploited CVEs (with retry)
-nvd_fetch.py        -> enriches CVEs with CVSS + EPSS + CPE ranges + CWE
-exploit_db.py       -> checks Exploit-DB for public exploits per CVE
-mitre_attack.py     -> maps vuln_type to ATT&CK technique + tactic
-matching.py         -> matches CVEs to assets (CPE version-aware + ATT&CK)
-threat_pressure.py  -> computes TPF, generates alerts, writes output
-```
+| Variable | Default | Description |
+|---|---|---|
+| `NVD_API_KEY` | — | NVD API key (10× rate limit increase) |
+| `CRD_DB_PATH` | `threat_intelligence.db` | SQLite database path |
+| `CRD_LOG_LEVEL` | `INFO` | DEBUG / INFO / WARNING / ERROR |
+| `CRD_SCAN_DELAY_SECONDS` | `2` | Polite delay between target scans |
+| `CRD_TARGETS_FILE` | `targets.json` | Targets file path |
 
 ---
 
-## Running Tests
+## Tests
 
 ```bash
 # Run all 87 tests
-python -m pytest tests/ -q
+python -m pytest tests/ -v
 
-# Run a specific test file
+# Run a specific module
 python -m unittest tests.test_matching -v
 ```
 
-Tests cover:
-- **TPF computation** — CVSS/EPSS thresholds, alert levels, edge cases, None safety
-- **CVE matching** — version parsing, CPE range checking, confidence scoring, vuln type detection
-- **Configuration** — config/logging imports, module imports
+Tests cover TPF computation, version parsing, CPE range checking, confidence scoring, alert suppression, and all edge cases.
 
 ---
 
-## Pipeline Flow
+## Output Files
 
-```
-targets.json
-    |
-    v
-Asset Monitor
-  Phase 1: HTTP fingerprinting (vendor, product, server header)
-  Phase 2: Nmap service + version detection
-  Phase 3A: Technology detection (HTML, cookies, JS libs, headers)
-  Phase 3B: WAF detection (Cloudflare, Akamai, AWS, F5, etc.)
-    |
-    v
-CISA KEV -> NVD (CVSS + CPE + CWE) + EPSS -> Exploit-DB -> ATT&CK Mapping -> Matching -> TPF
-    |
-    v
-threat_intelligence_output.json  <- output of this pipeline
-alerts.json
-```
-
----
-
-## Threat Pressure Factor (TPF)
-
-TPF is a multiplier (1.0–2.0):
-
-```
-Final Risk = base_probability x threat_pressure_factor
-```
-
-**Components:**
-
-| Component | Condition | Weight |
-|---|---|---|
-| CVSS Score | >=9.0 Critical | +0.20 |
-| CVSS Score | >=7.0 High | +0.13 |
-| CVSS Score | >=4.0 Medium | +0.07 |
-| EPSS Score | >=0.7 | +0.20 |
-| EPSS Score | >=0.4 | +0.13 |
-| EPSS Score | >=0.1 | +0.07 |
-| KEV Presence | Always (all records) | +0.13 |
-| Vulnerability Type | RCE | +0.20 |
-| Vulnerability Type | SQLi / Auth Bypass | +0.15 |
-| Vulnerability Type | Path Traversal / SSRF | +0.12 |
-| Vulnerability Type | XSS | +0.08 |
-| Business Criticality | Critical | +0.20 |
-| Business Criticality | High | +0.13 |
-| Business Criticality | Medium | +0.07 |
-| Recency | KEV added <=30 days | +0.10 |
-| Recency | KEV added <=90 days | +0.06 |
-| Recency | KEV added <=365 days | +0.03 |
-| Known Ransomware | If true | +0.07 |
-| Version Confirmed | CPE range only | +0.05 |
-| Public Exploit | Exploit-DB confirmed | +0.10 |
-
-**Alert levels:**
-
-| TPF | Alert Level |
+| File | Description |
 |---|---|
-| >= 1.7 | CRITICAL |
-| >= 1.5 | HIGH |
-| >= 1.3 | MEDIUM |
-| < 1.3 | LOW |
+| `threat_intelligence_output.json` | Full TPF results per CVE-Asset pair |
+| `alerts.json` | Active alerts (suppression-aware) |
+| `asset_changes.json` | Infrastructure change log across scans |
+| `threat_intelligence.db` | SQLite database (all 10 tables) |
 
----
-
-## Version Confirmation
-
-Two-pass approach to confirm if a detected version is vulnerable:
-
-**Pass 1 — CPE Ranges (High Confidence)**
-Uses structured NVD CPE data. Two sub-cases:
-- **CPE with version range** (`versionStartIncluding` / `versionEndExcluding`): checks if the Nmap-detected version falls within the vulnerable range.
-- **CPE with exact version** (no boundaries): extracts the exact version from the CPE criteria string (e.g. `IIS 6.0`) and requires an exact match with the detected version.
-Adds +0.05 to TPF only when confirmed. Reported as `confirmation_method: "cpe_range"`.
-
-**Pass 2 — Text Search (Medium Confidence, fallback)**
-When NVD has no structured CPE data, searches the CVE description text for the version string using word-boundary regex. Does NOT add TPF bonus. Reported as `confirmation_method: "text_search"`.
-
-**No Match:** `version_confirmed: false`, `confirmation_method: "none"`. This includes cases where the exact CPE version does not match the detected version.
-
----
-
-## MITRE ATT&CK Mapping
-
-Each matched CVE is automatically mapped to an ATT&CK technique based on its `vuln_type`:
-
-| vuln_type | Technique ID | Technique Name | Tactic |
-|---|---|---|---|
-| rce | T1190 | Exploit Public-Facing Application | Initial Access |
-| sqli | T1190 | Exploit Public-Facing Application | Initial Access |
-| auth_bypass | T1078 | Valid Accounts | Defense Evasion |
-| path_traversal | T1083 | File and Directory Discovery | Discovery |
-| ssrf | T1090 | Proxy | Command and Control |
-| xss | T1059.007 | JavaScript | Execution |
-| other | T1190 | Exploit Public-Facing Application | Initial Access |
-
-Fields added to output: `attack_technique_id`, `attack_technique_name`, `attack_tactic`.
-
----
-
-## Data Sources
-
-| Source | URL | What it provides |
-|---|---|---|
-| CISA KEV | cisa.gov | Confirmed exploited vulnerabilities |
-| NVD | nvd.nist.gov | CVSS + CPE ranges + CWE + published date |
-| EPSS | first.org | 30-day exploitation probability |
-| Exploit-DB | exploit-db.com | Public exploit availability + IDs |
-| MITRE ATT&CK | attack.mitre.org | Tactic + technique mapping |
-| Nmap | nmap.org | Live service version detection |
-
----
-
-## Team Integration
-
-```
-Pentest Module  ->  Threat Intelligence Module (Steps 0-4)
-                        |
-                        v
-               threat_intelligence_output.json
-               alerts.json
-```
-
-**Shared configuration:** All modules use `config.py` for paths and settings. Override via `CRD_*` environment variables to point all modules at the same database and output directory.
-
-**Shared database:** All modules read/write the same SQLite database (`config.DB_PATH`). For concurrent multi-module access, migrate to PostgreSQL and update `CRD_DB_PATH`.
-
-See `THREAT_INTELLIGENCE_OUTPUT_GUIDE.md` for TI output field documentation.
+All output files are excluded from the repo via `.gitignore` and recreated on each run.
 
 ---
 
 ## Legal Notice
 
-Only scan systems you are authorized to test. Demo targets (`testphp.vulnweb.com`, `testasp.vulnweb.com`) are Acunetix-provided legal test environments.
+Only scan systems you are authorized to test. The default `targets.json` contains publicly available, legally authorized test environments (Nmap's `scanme.nmap.org`, Acunetix demo apps, OWASP Juice Shop, IBM Altoro, PortSwigger Gin & Juice). Do not use this tool against systems without explicit written permission from the system owner.

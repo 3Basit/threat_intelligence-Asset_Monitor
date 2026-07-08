@@ -1,32 +1,101 @@
 [
   {
-    "target_id": "TARGET-1",
-    "url": "https://stdch.menofia.education",
-    "business_criticality": "critical",
-    "internet_facing": true,
-    "authorized": true,
-    "scan_profile": "university"
-  },
-  { "target_id": "TARGET-2",
-    "url": "https://menofia.education",
-    "business_criticality": "critical",
-    "internet_facing": true,
-    "authorized": true,
-    "scan_profile": "university"
-  },
-  {"target_id": "TARGET-3",
-    "url": "http://testphp.vulnweb.com",
+    "target_id": "TARGET-001",
+    "url": "http://scanme.nmap.org",
     "business_criticality": "low",
     "internet_facing": true,
     "authorized": true,
-    "scan_profile": "acunetix_test"
+    "scan_profile": "nmap_official",
+    "notes": "Official Nmap scan-me host — explicitly authorized for scanning"
   },
   {
-    "target_id": "TARGET-8",
+    "target_id": "TARGET-002",
+    "url": "http://testphp.vulnweb.com",
+    "business_criticality": "medium",
+    "internet_facing": true,
+    "authorized": true,
+    "scan_profile": "acunetix_test",
+    "notes": "Acunetix PHP test environment — legally authorized for security testing"
+  },
+  {
+    "target_id": "TARGET-003",
+    "url": "http://testasp.vulnweb.com",
+    "business_criticality": "medium",
+    "internet_facing": true,
+    "authorized": true,
+    "scan_profile": "acunetix_test",
+    "notes": "Acunetix ASP test environment — legally authorized for security testing"
+  },
+  {
+    "target_id": "TARGET-004",
+    "url": "http://testaspnet.vulnweb.com",
+    "business_criticality": "medium",
+    "internet_facing": true,
+    "authorized": true,
+    "scan_profile": "acunetix_test",
+    "notes": "Acunetix ASP.NET test environment — legally authorized for security testing"
+  },
+  {
+    "target_id": "TARGET-005",
+    "url": "http://demo.testfire.net",
+    "business_criticality": "medium",
+    "internet_facing": true,
+    "authorized": true,
+    "scan_profile": "ibm_altoro",
+    "notes": "IBM Altoro Mutual — intentionally vulnerable demo bank application"
+  },
+  {
+    "target_id": "TARGET-006",
     "url": "http://zero.webappsecurity.com",
+    "business_criticality": "medium",
+    "internet_facing": true,
+    "authorized": true,
+    "scan_profile": "hp_webinspect",
+    "notes": "HP WebInspect demo banking app — authorized for security testing"
+  },
+  {
+    "target_id": "TARGET-007",
+    "url": "http://demo.itsecgames.com",
+    "business_criticality": "medium",
+    "internet_facing": true,
+    "authorized": true,
+    "scan_profile": "bwapp",
+    "notes": "bWAPP (buggy web app) — OWASP-linked intentionally vulnerable app"
+  },
+  {
+    "target_id": "TARGET-008",
+    "url": "http://www.webscantest.com",
     "business_criticality": "low",
     "internet_facing": true,
     "authorized": true,
-    "scan_profile": "webappsecurity_test"
+    "scan_profile": "netsparker_test",
+    "notes": "Netsparker/Invicti test environment — authorized for scanning"
+  },
+  {
+    "target_id": "TARGET-009",
+    "url": "https://juice-shop.herokuapp.com",
+    "business_criticality": "high",
+    "internet_facing": true,
+    "authorized": true,
+    "scan_profile": "owasp_juice_shop",
+    "notes": "OWASP Juice Shop — flagship intentionally insecure web application"
+  },
+  {
+    "target_id": "TARGET-010",
+    "url": "https://ginandjuice.shop",
+    "business_criticality": "high",
+    "internet_facing": true,
+    "authorized": true,
+    "scan_profile": "portswigger_gin_juice",
+    "notes": "PortSwigger Gin & Juice Shop — modern vulnerable app for web security testing"
+  },
+  {
+    "target_id": "TARGET-011",
+    "url": "http://www.hackthissite.org",
+    "business_criticality": "low",
+    "internet_facing": true,
+    "authorized": true,
+    "scan_profile": "hackthissite",
+    "notes": "HackThisSite — legal hacking challenges and training platform"
   }
 ]

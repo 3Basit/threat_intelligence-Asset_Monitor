@@ -3,7 +3,7 @@
 > **Give it a URL. It tells you exactly what's running, what's vulnerable, how dangerous it is, and how an attacker would exploit it.**
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-87%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-88%20passing-brightgreen)]()
 [![Sources](https://img.shields.io/badge/Sources-CISA%20KEV%20%7C%20NVD%20%7C%20EPSS%20%7C%20Exploit--DB-orange)]()
 [![ATT&CK](https://img.shields.io/badge/MITRE-ATT%26CK%20Mapped-red)]()
 
@@ -372,7 +372,7 @@ Threat_intelligence-Asset_Monitor/
 ├── database.py             # SQLite schema (10 tables) + all DB operations
 ├── check_db.py             # DB inspection utility
 │
-├── tests/                  # 87 unit tests
+├── tests/                  # 88 unit tests
 │   ├── test_threat_pressure.py
 │   ├── test_matching.py
 │   └── test_config.py
@@ -404,7 +404,7 @@ Threat_intelligence-Asset_Monitor/
 ## Tests
 
 ```bash
-python -m pytest tests/ -v          # all 87 tests
+python -m pytest tests/ -v          # all 88 tests
 python -m unittest tests.test_matching -v
 ```
 

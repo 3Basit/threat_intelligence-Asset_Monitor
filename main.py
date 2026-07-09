@@ -54,50 +54,11 @@ def main():
     print("Step 4: Computing TPF + Generating alerts...")
     run_threat_pressure()
 
-    # ── Step 5: FAIR Prediction (disabled — run separately if needed) ──
-    print("=" * 50)
-    print("Step 5: FAIR Risk Prediction... [SKIPPED — run prediction_model separately]")
-    # To run prediction locally: python -m prediction_model.fair_engine
-    # _run_prediction_step()  ← disabled: prediction module excluded from this pipeline
-
     print("=" * 50)
     print("Pipeline complete!")
 
 
-def _run_prediction_step():
-    """Run FAIR prediction if prerequisites are available.
 
-    Prerequisites:
-    - company_profile.json exists (user must create it)
-    - prediction_model/saved_model/magnitude_model.joblib exists (must train first)
-    - threat_intelligence_output.json exists (produced by Step 4)
-    """
-    ti_output_file = config.TI_OUTPUT_FILE
-    company_profile_file = config.COMPANY_PROFILE_FILE
-    model_file = os.path.join(config.MODEL_DIR, "magnitude_model.joblib")
-
-    if not os.path.exists(ti_output_file):
-        log.info("No TI output found — run Steps 1-4 first")
-        return
-
-    if not os.path.exists(company_profile_file):
-        log.info("No company_profile.json found — create one with industry_sector, region, estimated_records (see prediction_model/schema.py)")
-        return
-
-    if not os.path.exists(model_file):
-        log.info("No trained model found — train first: python -m prediction_model.model_training --compare")
-        return
-
-    try:
-        from prediction_model.fair_engine import run_prediction
-        run_prediction(
-            ti_output_file=ti_output_file,
-            company_profile_file=company_profile_file,
-            output_file=config.PREDICTION_OUTPUT_FILE,
-        )
-    except Exception as e:
-        log.error("Prediction failed: %s", e)
-        log.info("The TI pipeline completed successfully. Prediction is optional.")
 
 
 if __name__ == "__main__":

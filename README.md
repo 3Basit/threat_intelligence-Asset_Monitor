@@ -3,7 +3,7 @@
 > **Give it a URL. It tells you exactly what's running, what's vulnerable, how dangerous it is, and how an attacker would exploit it.**
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-88%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-68%20passing-brightgreen)]()
 [![Sources](https://img.shields.io/badge/Sources-CISA%20KEV%20%7C%20NVD%20%7C%20EPSS%20%7C%20Exploit--DB-orange)]()
 [![ATT&CK](https://img.shields.io/badge/MITRE-ATT%26CK%20Mapped-red)]()
 
@@ -15,7 +15,7 @@ Point it at any web asset and it returns a **complete threat picture**:
 
 ```
 [CRITICAL] CVE-2017-12617 | Apache Tomcat → zero.webappsecurity.com
-           | rce | TPF: 1.88 | VERSION CONFIRMED (CPE_RANGE) | 2 PUBLIC EXPLOITS
+           | rce | TPF: 1.68 | VERSION CONFIRMED (CPE_RANGE) | 2 PUBLIC EXPLOITS
 ```
 
 Every result includes:
@@ -54,7 +54,7 @@ Scanning http://zero.webappsecurity.com...
 [CPE MATCH] CVE-2017-12617 v7.0.70 == cpe_exact: >=7.0.0 <7.0.82
 
 [CRITICAL] CVE-2017-12617 | Tomcat → zero.webappsecurity.com
-           | rce | TPF: 1.88 [VERSION CPE_RANGE] [EXPLOIT x2]
+           | rce | TPF: 1.68 [VERSION CPE_RANGE] [EXPLOIT x2]
 
 [CRITICAL] CVE-2025-24813 | Tomcat → zero.webappsecurity.com
            | rce | TPF: 1.95 [VERSION CPE_RANGE] [EXPLOIT x1]
@@ -81,7 +81,7 @@ targets.json  (your URLs + criticality)
 │      Tomcat version (not connector version)  │
 │                                              │
 │  Phase 2 — Nmap Service Scan                 │
-│    -sV -Pn -n -p 80,443,8080,8443,8000,8888  │
+│    -sV -Pn -n -p 80,443,8080,8443,8000,6868  │
 │    → confirms version + emits CPE string     │
 │                                              │
 │  Phase 3 — Tech & WAF Detection              │
@@ -233,8 +233,8 @@ Each record in `threat_intelligence_output.json`:
   "is_behind_waf": false,
   "waf_name": null,
 
-  "threat_score": 0.88,
-  "threat_pressure_factor": 1.88,
+  "threat_score": 0.68,
+  "threat_pressure_factor": 1.68,
   "alert_level": "CRITICAL"
 }
 ```
@@ -372,7 +372,7 @@ Threat_intelligence-Asset_Monitor/
 ├── database.py             # SQLite schema (10 tables) + all DB operations
 ├── check_db.py             # DB inspection utility
 │
-├── tests/                  # 88 unit tests
+├── tests/                  # 68 unit tests
 │   ├── test_threat_pressure.py
 │   ├── test_matching.py
 │   └── test_config.py
@@ -404,7 +404,7 @@ Threat_intelligence-Asset_Monitor/
 ## Tests
 
 ```bash
-python -m pytest tests/ -v          # all 88 tests
+python -m pytest tests/ -v          # all 68 tests
 python -m unittest tests.test_matching -v
 ```
 
